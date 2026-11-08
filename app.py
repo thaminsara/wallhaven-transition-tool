@@ -2,11 +2,10 @@ import os
 import json
 import ctypes
 import random
-import time
 import requests
 import keyboard
 import tkinter as tk
-from PIL import Image, ImageTk, ImageFilter, ImageOps
+from PIL import Image, ImageFilter, ImageOps
 
 CONFIG_FILE = "config.json"
 
@@ -56,7 +55,7 @@ def get_fallback_wallpaper(download_dir):
     valid_exts = (".png", ".jpg", ".jpeg", ".webp")
     local_files = [
         os.path.join(download_dir, f) for f in os.listdir(download_dir)
-        if f.lower().endswith(valid_exts) and f != "wallhaven_current.jpg"
+        if f.lower().endswith(valid_exts) and f != "wallhaven_current.jpg" and not f.startswith("sketch_")
     ]
     
     if local_files:
@@ -65,60 +64,30 @@ def get_fallback_wallpaper(download_dir):
         return chosen
     return None
 
-def play_smooth_outline_transition(image_path):
-    print("[*] Rendering smooth sketch outline & background reveal transition...")
+def set_windows_wallpaper(image_path):
+    print("[*] Processing sketch outline and setting wallpaper in background...")
     
     try:
+        # Open the target wallpaper image
         img = Image.open(image_path).convert("RGB")
         
-        # 1. Create a smoother, softer pencil sketch outline effect using ImageOps & FIND_EDGES
+        # 1. Generate a smooth pencil sketch outline version in the background
         gray = img.convert("L")
         smoothed = gray.filter(ImageFilter.SMOOTH_MORE)
         edges = smoothed.filter(ImageFilter.FIND_EDGES)
-        sketch = ImageOps.invert(edges).convert("L")
+        sketch = ImageOps.invert(edges).convert("RGB")
         
-        root = tk.Tk()
-        root.attributes('-fullscreen', True)
-        root.attributes('-topmost', True)
-        root.configure(bg='black')
+        # Save sketch locally for reference
+        sketch_path = os.path.join(os.path.dirname(image_path), "wallhaven_sketch_cache.jpg")
+        sketch.save(sketch_path, "JPEG")
         
-        screen_width = root.winfo_screenwidth()
-        screen_height = root.winfo_screenheight()
+        # 2. Apply directly to Windows desktop background seamlessly without any window popups
+        abs_path = os.path.abspath(image_path)
+        ctypes.windll.user32.SystemParametersInfoW(20, 0, abs_path, 3)
+        print(f"[+] Wallpaper updated seamlessly in background: {abs_path}")
         
-        # Resize images to screen
-        img_resized = img.resize((screen_width, screen_height), Image.Resampling.LANCZOS)
-        sketch_resized = sketch.resize((screen_width, screen_height), Image.Resampling.LANCZOS)
-        
-        tk_wallpaper = ImageTk.PhotoImage(img_resized)
-        tk_sketch = ImageTk.PhotoImage(sketch_resized)
-        
-        # Start with the sketch outline visible in the background/foreground
-        label = tk.Label(root, image=tk_sketch, bg='black', highlightthickness=0)
-        label.pack(fill=tk.BOTH, expand=True)
-        
-        root.update()
-        time.sleep(0.5)
-        
-        # Smoothly crossfade from sketch outline into the full wallpaper image in the background
-        label.configure(image=tk_wallpaper)
-        root.update()
-        
-        # Gentle fade out of the overlay window so the actual desktop wallpaper takes over seamlessly
-        for alpha in [0.9, 0.6, 0.3, 0.0]:
-            root.attributes('-alpha', alpha)
-            root.update()
-            time.sleep(0.08)
-            
-        root.destroy()
     except Exception as e:
-        print(f"[!] Transition animation skipped: {e}")
-
-def set_windows_wallpaper(image_path):
-    play_smooth_outline_transition(image_path)
-    
-    abs_path = os.path.abspath(image_path)
-    ctypes.windll.user32.SystemParametersInfoW(20, 0, abs_path, 3)
-    print(f"[+] Wallpaper set successfully: {abs_path}")
+        print(f"[!] Background wallpaper application error: {e}")
 
 def change_wallpaper():
     config = load_config()
@@ -135,12 +104,10 @@ def change_wallpaper():
             target_path = os.path.join(download_dir, filename)
             
             if not os.path.exists(target_path):
-                print(f"[*] Downloading new wallpaper and saving to local cache...")
+                print(f"[*] Downloading new wallpaper...")
                 img_data = requests.get(image_url, timeout=15).content
                 with open(target_path, "wb") as handler:
                     handler.write(img_data)
-            else:
-                print("[*] Wallpaper already exists in local cache.")
         except Exception as e:
             print(f"[!] Failed to download online wallpaper: {e}")
             target_path = None
@@ -150,13 +117,7 @@ def change_wallpaper():
         target_path = get_fallback_wallpaper(download_dir)
         
     if target_path and os.path.exists(target_path):
-        current_active = os.path.join(download_dir, "wallhaven_current.jpg")
-        try:
-            img = Image.open(target_path)
-            img.convert("RGB").save(current_active, "JPEG")
-            set_windows_wallpaper(current_active)
-        except Exception:
-            set_windows_wallpaper(target_path)
+        set_windows_wallpaper(target_path)
     else:
         print("[!] No wallpapers found online or in your local './wallpapers' folder!")
 
