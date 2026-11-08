@@ -66,7 +66,7 @@ def get_fallback_wallpaper(download_dir):
     return None
 
 def play_outline_transition(image_path):
-    print("[*] Rendering pencil sketch outline transition...")
+    print("[*] Rendering smooth translucent outline transition...")
     
     try:
         img = Image.open(image_path)
@@ -75,6 +75,8 @@ def play_outline_transition(image_path):
         root = tk.Tk()
         root.attributes('-fullscreen', True)
         root.attributes('-topmost', True)
+        # Translucent overlay so it doesn't block your view completely
+        root.attributes('-alpha', 0.65)
         root.configure(bg='black')
         
         screen_width = root.winfo_screenwidth()
@@ -87,7 +89,14 @@ def play_outline_transition(image_path):
         label.pack(fill=tk.BOTH, expand=True)
         
         root.update()
-        time.sleep(1.2)
+        
+        # Fast, smooth fade-out effect
+        time.sleep(0.4)
+        for alpha in [0.65, 0.4, 0.1, 0.0]:
+            root.attributes('-alpha', alpha)
+            root.update()
+            time.sleep(0.05)
+            
         root.destroy()
     except Exception as e:
         print(f"[!] Transition animation skipped: {e}")
@@ -113,7 +122,6 @@ def change_wallpaper():
             filename = f"wallhaven_{wallpaper_id}.{ext}"
             target_path = os.path.join(download_dir, filename)
             
-            # Download and save permanently to local cache if not already saved
             if not os.path.exists(target_path):
                 print(f"[*] Downloading new wallpaper and saving to local cache...")
                 img_data = requests.get(image_url, timeout=15).content
@@ -125,7 +133,6 @@ def change_wallpaper():
             print(f"[!] Failed to download online wallpaper: {e}")
             target_path = None
             
-    # Fallback to local cache if offline or fetch failed
     if not target_path:
         print("[*] Switching to offline fallback mode...")
         target_path = get_fallback_wallpaper(download_dir)
