@@ -6,7 +6,7 @@ import time
 import requests
 import keyboard
 import tkinter as tk
-from PIL import Image, ImageTk, ImageFilter
+from PIL import Image, ImageTk, ImageFilter, ImageOps
 
 CONFIG_FILE = "config.json"
 
@@ -65,44 +65,56 @@ def get_fallback_wallpaper(download_dir):
         return chosen
     return None
 
-def play_outline_transition(image_path):
-    print("[*] Rendering smooth translucent outline transition...")
+def play_smooth_outline_transition(image_path):
+    print("[*] Rendering smooth sketch outline & background reveal transition...")
     
     try:
-        img = Image.open(image_path)
-        sketch_img = img.filter(ImageFilter.FIND_EDGES).convert("L")
+        img = Image.open(image_path).convert("RGB")
+        
+        # 1. Create a smoother, softer pencil sketch outline effect using ImageOps & FIND_EDGES
+        gray = img.convert("L")
+        smoothed = gray.filter(ImageFilter.SMOOTH_MORE)
+        edges = smoothed.filter(ImageFilter.FIND_EDGES)
+        sketch = ImageOps.invert(edges).convert("L")
         
         root = tk.Tk()
         root.attributes('-fullscreen', True)
         root.attributes('-topmost', True)
-        # Translucent overlay so it doesn't block your view completely
-        root.attributes('-alpha', 0.65)
         root.configure(bg='black')
         
         screen_width = root.winfo_screenwidth()
         screen_height = root.winfo_screenheight()
         
-        sketch_resized = sketch_img.resize((screen_width, screen_height), Image.Resampling.LANCZOS)
+        # Resize images to screen
+        img_resized = img.resize((screen_width, screen_height), Image.Resampling.LANCZOS)
+        sketch_resized = sketch.resize((screen_width, screen_height), Image.Resampling.LANCZOS)
+        
+        tk_wallpaper = ImageTk.PhotoImage(img_resized)
         tk_sketch = ImageTk.PhotoImage(sketch_resized)
         
+        # Start with the sketch outline visible in the background/foreground
         label = tk.Label(root, image=tk_sketch, bg='black', highlightthickness=0)
         label.pack(fill=tk.BOTH, expand=True)
         
         root.update()
+        time.sleep(0.5)
         
-        # Fast, smooth fade-out effect
-        time.sleep(0.4)
-        for alpha in [0.65, 0.4, 0.1, 0.0]:
+        # Smoothly crossfade from sketch outline into the full wallpaper image in the background
+        label.configure(image=tk_wallpaper)
+        root.update()
+        
+        # Gentle fade out of the overlay window so the actual desktop wallpaper takes over seamlessly
+        for alpha in [0.9, 0.6, 0.3, 0.0]:
             root.attributes('-alpha', alpha)
             root.update()
-            time.sleep(0.05)
+            time.sleep(0.08)
             
         root.destroy()
     except Exception as e:
         print(f"[!] Transition animation skipped: {e}")
 
 def set_windows_wallpaper(image_path):
-    play_outline_transition(image_path)
+    play_smooth_outline_transition(image_path)
     
     abs_path = os.path.abspath(image_path)
     ctypes.windll.user32.SystemParametersInfoW(20, 0, abs_path, 3)
